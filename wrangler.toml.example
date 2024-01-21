@@ -1,0 +1,4 @@
+name = "image-cache-worker"
+
+[vars]
+RESIZER_URL="https://example.com"
