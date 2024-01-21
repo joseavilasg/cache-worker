@@ -1,0 +1,25 @@
+{
+	"name": "image-cache-worker",
+	"version": "1.0.0",
+	"description": "",
+	"main": "index.js",
+	"devDependencies": {
+		"@cloudflare/workers-types": "^4.20240117.0",
+		"@ianvs/prettier-plugin-sort-imports": "^4.1.1",
+		"concurrently": "^8.2.2",
+		"prettier": "^3.2.4",
+		"typescript": "5.3.3",
+		"wrangler": "^3.23.0"
+	},
+	"scripts": {
+		"dev": "concurrently \"npm:dev:esbuild\" \"npm:dev:wrangler\"",
+		"dev:wrangler": "wrangler dev dist/index.js --port 8080 --live-reload --log-level=log",
+		"dev:esbuild": "esbuild --bundle src/index.ts --format=esm --sourcemap  --watch --outfile=dist/index.js"
+	},
+	"author": "",
+	"license": "ISC",
+	"dependencies": {
+		"hono": "^3.12.6",
+		"mime": "^4.0.1"
+	}
+}
