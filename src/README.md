@@ -1,0 +1,1 @@
+With gd, it won't work because gd files are private, so we get 401
