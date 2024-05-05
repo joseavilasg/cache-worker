@@ -1,5 +1,6 @@
 export interface Env {
 	RESIZER_URL: string
+	RESIZER_TOKEN: string
 }
 export interface Caches {
 	default: {
@@ -44,8 +45,18 @@ const handler: ExportedHandler<Env> = {
 			newUrl.pathname = url.pathname
 			newUrl.search = url.search
 
+			const resizerToken = env.RESIZER_TOKEN
+			let headers = {}
+			if (resizerToken) {
+				headers = {
+					Authorization: `Bearer ${resizerToken}`,
+				}
+			}
+
 			// If not in cache, get it from origin
-			response = await fetch(newUrl.href)
+			response = await fetch(newUrl.href, {
+				headers
+			})
 
 			if (response.ok) {
 				const res = new Response(response.body, response)
