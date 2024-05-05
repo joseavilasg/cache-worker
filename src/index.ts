@@ -16,11 +16,11 @@ export interface Caches {
 
 declare let caches: Caches
 
-async function cacheResponse(ctx: ExecutionContext, url: string, headers: Record<string, string>) {
+async function cacheResponse(ctx: ExecutionContext, url: string, extension: string, headers: Record<string, string>) {
 	const cacheKey = new URL(url)
 	cacheKey.hostname = "cache.cdn.com"
 	const cache = caches.default
-	let response = await cache.match(cacheKey.href)
+	let response = await cache.match(cacheKey.href + extension)
 	if (!response) {
 		response = await fetch(url, { headers })
 		if (response.ok) {
@@ -32,7 +32,7 @@ async function cacheResponse(ctx: ExecutionContext, url: string, headers: Record
 					"Content-Disposition": "inline",
 				},
 			})
-			ctx.waitUntil(cache.put(cacheKey.href, res.clone()))
+			ctx.waitUntil(cache.put(cacheKey.href + extension, res.clone()))
 			response = res
 		} else {
 			response = new Response(response.body, { status: response.status })
@@ -56,7 +56,7 @@ export class AssetService {
 		if (filename === "favicon.ico") {
 			throw new HTTPException(404, {})
 		}
-		const { type, ...rest } = params
+		const { mimeType, ...rest } = params
 		const newUrl = new URL("https://example.com");
 		const parts = url.pathname.split("/")
 		if (parts.length > 1 && parts[1].includes("http")) {
@@ -70,8 +70,15 @@ export class AssetService {
 		}
 
 		let mediaType = mime.getType(filename!) || ""
+		let extension = ""
+		if (!mediaType && mimeType) {
+			const ext = mime.getExtension(mimeType)
+			if (ext) {
+				extension = "." + ext
+			}
+		}
 		let headers = {}
-		if (mediaType.startsWith("image") || type === "image") {
+		if (mediaType.startsWith("image") || mimeType.startsWith("image")) {
 			const oldHost = newUrl.host
 			newUrl.host = ctx.env.RESIZER_HOST
 			newUrl.pathname = `${oldHost}${newUrl.pathname}`
@@ -84,7 +91,7 @@ export class AssetService {
 			}
 		}
 		newUrl.searchParams.sort()
-		const response = await cacheResponse(ctx.executionCtx, newUrl.href, headers)
+		const response = await cacheResponse(ctx.executionCtx, newUrl.href, extension, headers)
 		return new Response(response.body, response)
 	}
 }
