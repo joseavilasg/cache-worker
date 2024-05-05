@@ -56,7 +56,7 @@ export class AssetService {
 		if (filename === "favicon.ico") {
 			throw new HTTPException(404, {})
 		}
-		const { mimeType, ...rest } = params
+		const { mimeType = "", ...rest } = params
 		const newUrl = new URL("https://example.com");
 		const parts = url.pathname.split("/")
 		if (parts.length > 1 && parts[1].includes("http")) {
