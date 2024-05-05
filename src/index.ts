@@ -75,16 +75,19 @@ export class AssetService {
 			const ext = mime.getExtension(mimeType)
 			if (ext) {
 				extension = "." + ext
+			} else {
+				extension = ".zip"
 			}
 		}
-		let headers = {}
-		if (mediaType.startsWith("image") || mimeType.startsWith("image")) {
+		let headers = Object.fromEntries(ctx.req.raw.headers.entries())
+		if (mediaType.startsWith("image")) {
 			const oldHost = newUrl.host
 			newUrl.host = ctx.env.RESIZER_HOST
 			newUrl.pathname = `${oldHost}${newUrl.pathname}`
 			const resizerToken = ctx.env.RESIZER_TOKEN
 			if (resizerToken) {
 				headers = {
+					...headers,
 					Authorization: `Bearer ${resizerToken}`,
 					"Content-Type": mediaType,
 				}
