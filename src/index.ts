@@ -82,6 +82,7 @@ export class AssetService {
 		let headers = Object.fromEntries(ctx.req.raw.headers.entries())
 		if (mediaType.startsWith("image")) {
 			const oldHost = newUrl.host
+			newUrl.port = ''
 			newUrl.host = ctx.env.RESIZER_HOST
 			newUrl.pathname = `${oldHost}${newUrl.pathname}`
 			const resizerToken = ctx.env.RESIZER_TOKEN
