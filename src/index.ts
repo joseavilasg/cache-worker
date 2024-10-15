@@ -16,30 +16,157 @@ export interface Caches {
 
 declare let caches: Caches
 
+type SaveResponseInCacheParams = {
+	matchKey: string
+	rangedMatchKey?: string
+	url: string
+	headers: Record<string, string>
+	cache: Caches["default"]
+	isRanged: boolean
+}
+
+type SaveResponseInCache = (
+	ctx: ExecutionContext,
+	params: SaveResponseInCacheParams,
+) => Promise<Response>
+
 async function cacheResponse(ctx: ExecutionContext, url: string, extension: string, headers: Record<string, string>) {
-	const cacheKey = new URL(url)
-	cacheKey.hostname = "cache.cdn.com"
-	const cache = caches.default
-	let response = await cache.match(cacheKey.href + extension)
-	if (!response) {
-		response = await fetch(url, { headers })
+	const cacheKey = new URL(url);
+	cacheKey.hostname = "cache.cdn.com";
+	const cache = caches.default;
+
+	const matchKey = cacheKey.href + extension;
+	console.log({ matchKey });
+
+	const isRanged = Boolean(headers.range);
+
+	const wholeResponse = await cache.match(matchKey);
+	if (wholeResponse) {
+		console.log("whole cache hit");
+		return await getRangedResponse(headers, wholeResponse);
+	}
+
+	if (isRanged) {
+		const rangedMatchKey = `${cacheKey.href}/range/${headers.range}${extension}`;
+		console.log({ rangedMatchKey });
+
+		const rangedResponse = await cache.match(rangedMatchKey);
+		if (rangedResponse) {
+			console.log("ranged cache hit");
+			return rangedResponse;
+		}
+		console.log("ranged response not found");
+
+		return await saveResponseInCache(ctx, {
+			isRanged,
+			matchKey,
+			rangedMatchKey,
+			url,
+			headers,
+			cache,
+		});
+	}
+
+	console.log("whole response not found");
+	return await saveResponseInCache(ctx, {
+		isRanged,
+		matchKey,
+		url,
+		headers,
+		cache,
+	});
+}
+
+const saveResponseInCache: SaveResponseInCache = async (
+	ctx,
+	{
+		cache,
+		matchKey,
+		rangedMatchKey = "",
+		url,
+		headers,
+		isRanged,
+	}
+) => {
+	if (!isRanged) {
+		const wholeResponse = await cache.match(matchKey);
+		if (wholeResponse) {
+			console.log("cache hit while trying to download");
+			return await getRangedResponse(headers, wholeResponse);
+		}
+
+		console.log("downloading whole response");
+	}
+
+	let response: Response;
+	try {
+		response = await fetch(url, { headers });
 		if (response.ok) {
 			const res = new Response(response.body, {
 				headers: {
 					"Cache-Control": "public, max-age=604800, immutable",
-					"Content-Type":
-						response.headers.get("Content-Type") || "application/octet-stream",
+					"Content-Type": response.headers.get("Content-Type") || "application/octet-stream",
 					"Content-Disposition": "inline",
 				},
-			})
-			ctx.waitUntil(cache.put(cacheKey.href + extension, res.clone()))
-			response = res
+			});
+			ctx.waitUntil(cache.put(isRanged ? rangedMatchKey : matchKey, res.clone()));
+			response = res;
+			console.log("cache saved");
 		} else {
-			response = new Response(response.body, { status: response.status })
+			response = new Response(response.body, { status: response.status });
+		}
+	} catch (error) {
+		console.error("Error fetching the response:", error);
+		throw error;
+	}
+
+	return response;
+};
+
+const getRangedResponse = async (headers: Record<string, string>, response: Response) => {
+	if (headers.range) {
+		const rangeHeader = headers.range;
+		const rangeMatch = rangeHeader.match(/bytes=(\d+)-(\d+)?/);
+		if (rangeMatch) {
+			const start = parseInt(rangeMatch[1], 10);
+			const end = rangeMatch[2] ? parseInt(rangeMatch[2], 10) : undefined;
+
+			// Convert ReadableStream to ArrayBuffer
+			const reader = response?.body?.getReader();
+			const chunks = [];
+			let receivedLength = 0;
+
+			while (true) {
+				const { done, value } = await reader!.read();
+				if (done) break;
+				chunks.push(value);
+				receivedLength += value.length;
+			}
+
+			const arrayBuffer = new Uint8Array(receivedLength);
+			let position = 0;
+			for (const chunk of chunks) {
+				arrayBuffer.set(chunk, position);
+				position += chunk.length;
+			}
+
+			const finalEnd = end !== undefined ? end : receivedLength - 1;
+			const chunk = arrayBuffer.slice(start, finalEnd + 1);
+
+			const partialResponse = new Response(chunk, {
+				status: 206,
+				statusText: 'Partial Content',
+				headers: {
+					'Content-Range': `bytes ${start}-${finalEnd}/${receivedLength}`,
+					'Content-Length': chunk.length.toString(),
+					'Content-Type': response.headers.get('Content-Type') || 'application/octet-stream',
+				},
+			});
+			return partialResponse;
 		}
 	}
 
-	return response
+	return response;
 }
 
 export class AssetService {
